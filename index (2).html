@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>健康保衛戰：謠言射擊</title>
+    <style>
+        body { margin: 0; background: #222; color: white; font-family: sans-serif; overflow: hidden; text-align: center; }
+        canvas { background: #0a0a2a; display: block; margin: 0 auto; cursor: crosshair; }
+        #ui-layer { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); pointer-events: none; width: 90%; }
+        .stats { display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; text-shadow: 2px 2px 4px #000; }
+        #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 20px; border-radius: 15px; display: none; pointer-events: auto; }
+        .btn { background: #4CAF50; border: none; color: white; padding: 10px 20px; font-size: 18px; cursor: pointer; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="ui-layer">
+    <div class="stats">
+        <div>分數: <span id="score">0</span></div>
+        <div>生命值: <span id="hp">3</span></div>
+    </div>
+</div>
+
+<div id="msg">
+    <h1 id="msg-title">準備好了嗎？</h1>
+    <p id="msg-desc">擊落「錯誤謠言」得分，讓「正確知識」安全通過。<br>誤射正確知識或漏掉謠言都會扣生命！</p>
+    <button class="btn" onclick="startGame()">開始戰鬥</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const hpEl = document.getElementById('hp');
+const msgEl = document.getElementById('msg');
+
+canvas.width = window.innerWidth > 600 ? 600 : window.innerWidth;
+canvas.height = window.innerHeight;
+
+let score = 0;
+let hp = 3;
+let gameActive = false;
+let items = [];
+
+// 題庫：isRumor 為 true 代表是謠言（該射擊），false 代表是真理（該放行）
+const data = [
+    { text: "飯後立刻刷牙最好", isRumor: true },
+    { text: "口渴才喝水已脫水", isRumor: false },
+    { text: "流鼻血要往後仰", isRumor: true },
+    { text: "每天喝1.5公升水", isRumor: false },
+    { text: "酸性體質易生病", isRumor: true },
+    { text: "電子菸沒煙癮", isRumor: true },
+    { text: "均衡飲食最重要", isRumor: false },
+    { text: "流汗不等於燃脂", isRumor: false }
+];
+
+class HealthObject {
+    constructor() {
+        const entry = data[Math.floor(Math.random() * data.length)];
+        this.text = entry.text;
+        this.isRumor = entry.isRumor;
+        this.x = Math.random() * (canvas.width - 100) + 50;
+        this.y = -50;
+        this.speed = 2 + Math.random() * 2;
+        this.radius = 40;
+    }
+
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.isRumor ? "#ff4444" : "#44ff44"; // 謠言紅色，真理綠色
+        ctx.fill();
+        ctx.fillStyle = "white";
+        ctx.font = "14px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(this.text, this.x, this.y + 5);
+        ctx.closePath();
+    }
+
+    update() {
+        this.y += this.speed;
+    }
+}
+
+function startGame() {
+    score = 0;
+    hp = 3;
+    items = [];
+    gameActive = true;
+    msgEl.style.display = 'none';
+    scoreEl.innerText = score;
+    hpEl.innerText = hp;
+    animate();
+}
+
+// 點擊射擊邏輯
+canvas.addEventListener('mousedown', (e) => {
+    if (!gameActive) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    for (let i = items.length - 1; i >= 0; i--) {
+        const obj = items[i];
+        const dist = Math.hypot(mx - obj.x, my - obj.y);
+        if (dist < obj.radius) {
+            if (obj.isRumor) {
+                score += 10;
+            } else {
+                hp -= 1;
+                showHitEffect("ERROR! 這是正確觀念", "yellow");
+            }
+            scoreEl.innerText = score;
+            hpEl.innerText = hp;
+            items.splice(i, 1);
+            return;
+        }
+    }
+});
+
+function showHitEffect(txt, color) {
+    ctx.fillStyle = color;
+    ctx.font = "bold 20px Arial";
+    ctx.fillText(txt, canvas.width/2, canvas.height/2);
+}
+
+function animate() {
+    if (!gameActive) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (Math.random() < 0.02) items.push(new HealthObject());
+
+    items.forEach((obj, index) => {
+        obj.update();
+        obj.draw();
+
+        // 超出邊界處理
+        if (obj.y > canvas.height + 50) {
+            if (obj.isRumor) {
+                hp -= 1; // 漏掉謠言扣血
+                hpEl.innerText = hp;
+            }
+            items.splice(index, 1);
+        }
+    });
+
+    if (hp <= 0) {
+        gameActive = false;
+        document.getElementById('msg-title').innerText = "遊戲結束";
+        document.getElementById('msg-desc').innerText = `最終分數：${score}\n健康需要細心分辨！`;
+        msgEl.style.display = 'block';
+    } else {
+        requestAnimationFrame(animate);
+    }
+}
+
+msgEl.style.display = 'block';
+</script>
+
+</body>
+</html>
